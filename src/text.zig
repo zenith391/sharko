@@ -35,7 +35,7 @@ const KeywordType = enum {
         return switch (self) {
             .Type        => 0x0099CC,
             .ControlFlow => 0xFF0000,
-            .Identifier  => 0x00FF00,
+            .Identifier  => null, // default color
             .String      => 0xCCAA00,
             .Comment     => 0x888888,
             .Value       => 0x0000FF,
@@ -54,6 +54,7 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .keyword_switch = .ControlFlow,
     .keyword_catch = .ControlFlow,
     .builtin = .ControlFlow,
+    .bang = .ControlFlow,
 
     .keyword_pub = .ControlFlow, // TODO: .Modifier ?
     .keyword_usingnamespace = .ControlFlow,
@@ -74,6 +75,8 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .char_literal = .String,
     .string_literal = .String,
     .multiline_string_literal_line = .String,
+
+    .identifier = .Identifier,
 });
 
 pub const FlatText_Impl = struct {
@@ -132,18 +135,22 @@ pub const FlatText_Impl = struct {
                     sx = 0;
                 }
 
+                // TODO: use array of line starts, and divide cursor Y by 16 to get index into it
+                // This would make this much faster but would only work if all lines are same size
                 var lines = std.mem.split(u8, text, "\n");
                 var lineY: u32 = 0;
-                while (lines.next()) |line| {
-                    const lineStart = (lines.index orelse text.len) - line.len - 1;
-                    self.cursor = lineStart + line.len;
 
-                    var size = layout.getTextSize(line);
-                    while (size.width > sx and self.cursor > lineStart) {
-                        self.cursor -= 1;
-                        size = layout.getTextSize(line[0..self.cursor-lineStart]);
-                    }
+                self.cursor = text.len - 1; // By default cursor is at the end
+                while (lines.next()) |line| {
                     if (y >= lineY and y <= lineY + 16) {
+                        const lineStart = (lines.index orelse text.len) - line.len - 1;
+                        self.cursor = lineStart + line.len;
+
+                        var size = layout.getTextSize(line);
+                        while (size.width > sx and self.cursor > lineStart) {
+                            self.cursor -= 1;
+                            size = layout.getTextSize(line[0..self.cursor-lineStart]);
+                        }
                         break;
                     }
                     lineY += 16;
@@ -227,6 +234,7 @@ pub const FlatText_Impl = struct {
         while (true) {
             const token = tokenizer.next();
             if (token.tag == .eof) break;
+            //std.log.info("{s} \"{s}\"", .{@tagName(token.tag), textZ[token.loc.start..token.loc.end]});
 
             const keywordType = tagArray[@enumToInt(token.tag)];
             if (keywordType.getColor()) |color| {
