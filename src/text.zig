@@ -10,7 +10,7 @@ const StyleComponent = struct {
     pub fn extractColor(rgb: u24) [3]f32 {
         return [3]f32 {
             @intToFloat(f32, (rgb >> 16) & 0xFF) / 255,
-            @intToFloat(f32, (rgb >> 8 ) & 0xFF) / 255,
+            @intToFloat(f32, (rgb >>  8) & 0xFF) / 255,
             @intToFloat(f32, (rgb      ) & 0xFF) / 255,
         };
     }
@@ -84,10 +84,12 @@ pub const FlatText_Impl = struct {
 
     peer: ?zgt.backend.Canvas = null,
     handlers: FlatText_Impl.Handlers = undefined,
+    dataWrappers: FlatText_Impl.DataWrappers = .{},
 
     buffer: *TextBuffer,
     styling: Styling,
     cursor: usize = 0,
+    scrollY: u32 = 0,
 
     pub fn init(buffer: *TextBuffer) FlatText_Impl {
         return FlatText_Impl.init_events(FlatText_Impl {
@@ -96,12 +98,12 @@ pub const FlatText_Impl = struct {
         });
     }
 
-    pub fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
+    fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
         var finalKey = key;
         if (std.mem.eql(u8, key, "\x08")) { // backspace
             if (self.cursor > 0) {
-                try self.buffer.remove(self.cursor - 1, 1);
-                self.cursor -= 1;
+                const removed = try self.buffer.removeBackwards(self.cursor, 1);
+                self.cursor -= removed;
             }
             return;
         } else if (std.mem.eql(u8, key, "\t")) {
@@ -114,7 +116,7 @@ pub const FlatText_Impl = struct {
         self.cursor += finalKey.len;
     }
 
-    pub fn mouseButton(self: *FlatText_Impl, button: zgt.MouseButton, pressed: bool, x: u32, y: u32) !void {
+    fn mouseButton(self: *FlatText_Impl, button: zgt.MouseButton, pressed: bool, x: u32, y: u32) !void {
         if (pressed) { // on press
             if (button == .Left) {
                 var layout = zgt.DrawContext.TextLayout.init();
@@ -142,7 +144,7 @@ pub const FlatText_Impl = struct {
 
                 self.cursor = text.len - 1; // By default cursor is at the end
                 while (lines.next()) |line| {
-                    if (y >= lineY and y <= lineY + 16) {
+                    if (y + self.scrollY >= lineY and y + self.scrollY <= lineY + 16) {
                         const lineStart = (lines.index orelse text.len) - line.len - 1;
                         self.cursor = lineStart + line.len;
 
@@ -158,6 +160,23 @@ pub const FlatText_Impl = struct {
                 self.requestDraw() catch unreachable;
             }
         }
+    }
+
+    fn mouseScroll(self: *FlatText_Impl, dx: f32, dy: f32) !void {
+        const sensitivity = 48;
+        _ = dx;
+
+        if (dy > 0) {
+            self.scrollY += @floatToInt(u32, @ceil(dy)) * sensitivity;
+        } else {
+            const inc = @floatToInt(u32, @ceil(-dy));
+            if (inc < self.scrollY) {
+                self.scrollY -= inc * sensitivity;
+            } else {
+                self.scrollY = 0;
+            }
+        }
+        self.requestDraw() catch unreachable;
     }
 
     pub fn draw(self: *FlatText_Impl, ctx: zgt.DrawContext) !void {
@@ -178,53 +197,57 @@ pub const FlatText_Impl = struct {
         var buffer: [64]u8 = undefined;
         const nlines = @intCast(u32, std.mem.count(u8, text, "\n"));
         const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{ nlines });
-        const lineBarWidth = layout.getTextSize(maxLineText).width;
+        const lineBarWidth = @intCast(i32, layout.getTextSize(maxLineText).width);
         var lineNum: u32 = 1;
         var lines = std.mem.split(u8, text, "\n");
 
-        var lineY: u32 = 0;
+        var lineY: i32 = -@intCast(i32, self.scrollY);
         var compIndex: usize = 0;
         while (lines.next()) |line| {
+            if (lineY > height) {
+                break;
+            }
+
+            const lineHeight = 16;
             const lineStart = (lines.index orelse text.len) - line.len - 1;
             ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{ lineNum }));
 
             var startIdx: usize = 0;
-            var lineX: u32 = 0;
+            var lineX: i32 = 0;
             while (compIndex < self.styling.components.len and self.styling.components[compIndex].start < lineStart + line.len) : (compIndex += 1) {
                 const comp = self.styling.components[compIndex];
                 const slice = text[comp.start..comp.end];
                 const colors = StyleComponent.extractColor(comp.color orelse 0x000000);
-                ctx.setColor(0, 0, 0);
-                ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..(comp.start-lineStart)]);
-                lineX += layout.getTextSize(line[startIdx..(comp.start-lineStart)]).width;
 
-                ctx.setColor(colors[0], colors[1], colors[2]);
-                ctx.text(lineBarWidth + lineX, lineY, layout, slice);
-                lineX += layout.getTextSize(slice).width;
+                // if lineY < 0, we still need to update compIndex but not to draw text
+                if (lineY > -lineHeight) {
+                    ctx.setColor(0, 0, 0);
+                    ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..(comp.start-lineStart)]);
+                    lineX += @intCast(i32, layout.getTextSize(line[startIdx..(comp.start-lineStart)]).width);
+
+                    ctx.setColor(colors[0], colors[1], colors[2]);
+                    ctx.text(lineBarWidth + lineX, lineY, layout, slice);
+                    lineX += @intCast(i32, layout.getTextSize(slice).width);
+                }
                 startIdx = comp.end - lineStart;
             }
             ctx.setColor(0, 0, 0);
             ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..]);
-            if (self.cursor >= lineStart and self.cursor <= lineStart + line.len) {
+            if (self.cursor >= lineStart and self.cursor <= lineStart + line.len and lineY >= 0) {
                 const charPos = self.cursor - lineStart;
                 const x = layout.getTextSize(line[0..charPos]).width;
-                ctx.line(lineBarWidth+x, lineY, lineBarWidth+x, lineY + 16);
+                ctx.line(@intCast(u32, lineBarWidth)+x, @intCast(u32, lineY), @intCast(u32, lineBarWidth)+x, @intCast(u32, lineY + 16));
             }
-            lineY += 16;
+
+            lineY += lineHeight;
             lineNum += 1;
         }
-    }
-
-    /// Internal function used at initialization.
-    /// It is used to move some pointers so things do not break.
-    pub fn pointerMoved(self: *FlatText_Impl) void {
-        self.buffer.text.updateBinders();
     }
 
     pub fn updateStyle(self: *FlatText_Impl) !void {
         self.buffer.allocator.free(self.styling.components);
 
-        // TODO: asynchronous
+        // TODO: make the tokenizer asynchronous as on medium-size files it takes a lot of CPU time
         var components = std.ArrayList(StyleComponent).init(self.buffer.allocator);
 
         const textZ = try self.buffer.allocator.dupeZ(u8, self.buffer.text.get());
@@ -282,8 +305,11 @@ pub const FlatTextConfig = struct {
 
 pub fn FlatText(config: FlatTextConfig) !FlatText_Impl {
     var textEditor = FlatText_Impl.init(config.buffer);
-    try textEditor.addDrawHandler(FlatText_Impl.draw);
-    try textEditor.addMouseButtonHandler(FlatText_Impl.mouseButton);
-    try textEditor.addKeyTypeHandler(FlatText_Impl.keyTyped);
+    _ = try textEditor.addDrawHandler(FlatText_Impl.draw);
+    _ = try textEditor.addMouseButtonHandler(FlatText_Impl.mouseButton);
+    _ = try textEditor.addScrollHandler(FlatText_Impl.mouseScroll);
+    _ = try textEditor.addKeyTypeHandler(FlatText_Impl.keyTyped);
     return textEditor;
+}
+turn textEditor;
 }
