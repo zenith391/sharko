@@ -9,12 +9,14 @@ const filePath: []const u8 = "src/text.zig";
 
 pub fn onSave(button: *zgt.Button_Impl) !void {
     _ = button;
+    std.log.info("Saving to {s}", .{ filePath });
 
     const file = try std.fs.cwd().openFile(filePath, .{ .write = true });
     defer file.close();
 
     const writer = file.writer();
     try writer.writeAll(buffer.text.get());
+    std.log.info("Saved.", .{});
 }
 
 pub fn main() !void {
@@ -34,9 +36,9 @@ pub fn main() !void {
 
     try window.set(
         zgt.Column(.{}, .{
-            zgt.Row(.{}, .{
+            (try zgt.Row(.{}, .{
                 zgt.Button(.{ .label = "Save", .onclick = onSave })
-            }),
+            })).setAlignX(0),
             zgt.Row(.{}, .{
                 zgt.Button(.{ .label = "Treee" }),
                 zgt.Expanded(
