@@ -11,7 +11,7 @@ pub fn onSave(button: *zgt.Button_Impl) !void {
     _ = button;
     std.log.info("Saving to {s}", .{ filePath });
 
-    const file = try std.fs.cwd().openFile(filePath, .{ .write = true });
+    const file = try std.fs.cwd().createFile(filePath, .{ });
     defer file.close();
 
     const writer = file.writer();
@@ -51,5 +51,6 @@ pub fn main() !void {
 
     window.resize(1000, 600);
     window.show();
+
     zgt.runEventLoop();
 }

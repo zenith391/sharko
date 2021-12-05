@@ -2,24 +2,6 @@ const zgt = @import("zgt");
 const std = @import("std");
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
-const StyleComponent = struct {
-    start: usize,
-    end: usize,
-    color: ?u24 = null,
-
-    pub fn extractColor(rgb: u24) [3]f32 {
-        return [3]f32 {
-            @intToFloat(f32, (rgb >> 16) & 0xFF) / 255,
-            @intToFloat(f32, (rgb >>  8) & 0xFF) / 255,
-            @intToFloat(f32, (rgb      ) & 0xFF) / 255,
-        };
-    }
-};
-
-const Styling = struct {
-    components: []const StyleComponent
-};
-
 const KeywordType = enum {
     /// Type declarations (enum, struct, fn)
     Type,
@@ -79,6 +61,35 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .identifier = .Identifier,
 });
 
+const StyleComponent = struct {
+    start: usize,
+    end: usize,
+    color: ?u24 = null,
+
+    pub fn extractColor(rgb: u24) [3]f32 {
+        return [3]f32 {
+            @intToFloat(f32, (rgb >> 16) & 0xFF) / 255,
+            @intToFloat(f32, (rgb >>  8) & 0xFF) / 255,
+            @intToFloat(f32, (rgb      ) & 0xFF) / 255,
+        };
+    }
+};
+
+const Styling = struct {
+    components: []const StyleComponent,
+    tabWidth: union(enum) {
+        /// Tabs width is declared directly in pixels (not recommended as it breaks font sizes)
+        Pixels: u32,
+        /// Tabs width is declared in number of spaces (recommended)
+        Spaces: u32
+    } = .{ .Spaces = 4 }
+};
+
+const Selection = struct {
+    /// The start of the selection is the current cursor position
+    end: usize
+};
+
 pub const FlatText_Impl = struct {
     pub usingnamespace zgt.internal.All(FlatText_Impl);
 
@@ -89,7 +100,14 @@ pub const FlatText_Impl = struct {
     buffer: *TextBuffer,
     styling: Styling,
     cursor: usize = 0,
+    selection: ?Selection = undefined,
+
+    /// Current scroll value (differs from target when animating)
     scrollY: u32 = 0,
+
+    /// Target scroll value
+    targetScrollY: u32 = 0,
+    fontFace: [:0]const u8 = "Fira Code",
 
     pub fn init(buffer: *TextBuffer) FlatText_Impl {
         return FlatText_Impl.init_events(FlatText_Impl {
@@ -107,7 +125,7 @@ pub const FlatText_Impl = struct {
             }
             return;
         } else if (std.mem.eql(u8, key, "\t")) {
-            finalKey = "    ";
+            //finalKey = "    ";
         } else if (std.mem.eql(u8, key, "\r")) {
             finalKey = "\n";
         }
@@ -121,7 +139,7 @@ pub const FlatText_Impl = struct {
             if (button == .Left) {
                 var layout = zgt.DrawContext.TextLayout.init();
                 defer layout.deinit();
-                layout.setFont(.{ .face = "Fira Code", .size = 10.0 });
+                layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
 
                 const text = self.buffer.text.get();
 
@@ -167,13 +185,13 @@ pub const FlatText_Impl = struct {
         _ = dx;
 
         if (dy > 0) {
-            self.scrollY += @floatToInt(u32, @ceil(dy)) * sensitivity;
+            self.targetScrollY += @floatToInt(u32, @ceil(dy)) * sensitivity;
         } else {
             const inc = @floatToInt(u32, @ceil(-dy));
-            if (inc < self.scrollY) {
-                self.scrollY -= inc * sensitivity;
+            if (inc < self.targetScrollY) {
+                self.targetScrollY -= inc * sensitivity;
             } else {
-                self.scrollY = 0;
+                self.targetScrollY = 0;
             }
         }
         self.requestDraw() catch unreachable;
@@ -190,7 +208,7 @@ pub const FlatText_Impl = struct {
         var layout = zgt.DrawContext.TextLayout.init();
         defer layout.deinit();
         ctx.setColor(0, 0, 0);
-        layout.setFont(.{ .face = "Fira Code", .size = 10.0 });
+        layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
 
         const text = self.buffer.text.get();
 
@@ -242,6 +260,19 @@ pub const FlatText_Impl = struct {
             lineY += lineHeight;
             lineNum += 1;
         }
+
+        const t = 0.3;
+        const oldY = self.scrollY;
+        self.scrollY = @floatToInt(u32,
+            @intToFloat(f32, self.scrollY) * (1 - t) + @intToFloat(f32, self.targetScrollY) * t);
+        if (self.scrollY != oldY) {
+            self.requestDraw() catch unreachable;
+        }
+    }
+
+    pub fn deinit(self: *FlatText_Impl, widget: *zgt.Widget) void {
+        _ = widget;
+        self.buffer.allocator.free(self.styling.components);
     }
 
     pub fn updateStyle(self: *FlatText_Impl) !void {
@@ -257,7 +288,6 @@ pub const FlatText_Impl = struct {
         while (true) {
             const token = tokenizer.next();
             if (token.tag == .eof) break;
-            //std.log.info("{s} \"{s}\"", .{@tagName(token.tag), textZ[token.loc.start..token.loc.end]});
 
             const keywordType = tagArray[@enumToInt(token.tag)];
             if (keywordType.getColor()) |color| {
@@ -310,6 +340,4 @@ pub fn FlatText(config: FlatTextConfig) !FlatText_Impl {
     _ = try textEditor.addScrollHandler(FlatText_Impl.mouseScroll);
     _ = try textEditor.addKeyTypeHandler(FlatText_Impl.keyTyped);
     return textEditor;
-}
-turn textEditor;
 }
