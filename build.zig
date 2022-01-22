@@ -5,9 +5,9 @@ pub fn build(b: *std.build.Builder) !void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("zide", "src/main.zig");
-    try @import("zgt/build.zig").install(exe, "./zgt");
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    try @import("zgt/build.zig").install(exe, "./zgt");
     exe.install();
 
     const run_cmd = exe.run();

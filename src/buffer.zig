@@ -4,10 +4,10 @@ const Allocator = std.mem.Allocator;
 
 pub const TextBuffer = struct {
     text: zgt.StringDataWrapper,
-    allocator: *Allocator,
+    allocator: Allocator,
 
     /// Asserts 'text' is allocated with 'allocator'
-    pub fn from(allocator: *Allocator, text: []const u8) TextBuffer {
+    pub fn from(allocator: Allocator, text: []const u8) TextBuffer {
         return TextBuffer {
             .allocator = allocator,
             .text = zgt.StringDataWrapper.of(text)

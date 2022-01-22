@@ -1,26 +1,31 @@
-const zgt = @import("zgt");
 const std = @import("std");
+const zgt = @import("zgt");
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
 const KeywordType = enum {
     /// Type declarations (enum, struct, fn)
     Type,
+    /// Built-in types (i42, f32)
+    BuiltinType,
     /// Basically the rest
     ControlFlow,
     Identifier,
     Value,
     String,
     Comment,
+    Operator,
     None,
 
     pub fn getColor(self: KeywordType) ?u24 {
         return switch (self) {
             .Type        => 0x0099CC,
+            .BuiltinType => 0x6699FF,
             .ControlFlow => 0xFF0000,
             .Identifier  => null, // default color
-            .String      => 0xCCAA00,
+            .String      => 0xF0B800,
             .Comment     => 0x888888,
-            .Value       => 0x0000FF,
+            .Operator    => 0xFF0000,
+            .Value       => 0xCC33FF,
             else         => null
         };
     }
@@ -31,10 +36,15 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .keyword_try = .ControlFlow,
     .keyword_if = .ControlFlow,
     .keyword_else = .ControlFlow,
+    .keyword_for = .ControlFlow,
     .keyword_defer = .ControlFlow,
     .keyword_while = .ControlFlow,
     .keyword_switch = .ControlFlow,
     .keyword_catch = .ControlFlow,
+    .keyword_asm = .ControlFlow,
+    .keyword_async = .ControlFlow,
+    .keyword_await = .ControlFlow,
+    .keyword_break = .ControlFlow,
     .builtin = .ControlFlow,
     .bang = .ControlFlow,
 
@@ -44,6 +54,7 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .keyword_fn = .Type,
     .keyword_struct = .Type,
     .keyword_enum = .Type,
+    .keyword_error = .Type,
 
     .keyword_var = .ControlFlow,
     .keyword_const = .ControlFlow,
@@ -59,6 +70,28 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .multiline_string_literal_line = .String,
 
     .identifier = .Identifier,
+
+    .plus = .Operator,
+    .plus_equal = .Operator,
+    .plus_percent = .Operator,
+    .plus_percent_equal = .Operator,
+    .minus = .Operator,
+    .minus_equal = .Operator,
+    .minus_percent = .Operator,
+    .minus_percent_equal = .Operator,
+    .asterisk = .Operator,
+    .asterisk_equal = .Operator,
+    .asterisk_percent = .Operator,
+    .asterisk_percent_equal = .Operator,
+    .slash = .Operator,
+    .slash_equal = .Operator,
+    .percent = .Operator,
+    .percent_equal = .Operator,
+    .keyword_and = .Operator,
+    .keyword_or = .Operator,
+
+    .equal = .Operator,
+    .question_mark = .Operator
 });
 
 const StyleComponent = struct {
@@ -117,6 +150,7 @@ pub const FlatText_Impl = struct {
     }
 
     fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
+        std.log.info("key: {s}", .{ key });
         var finalKey = key;
         if (std.mem.eql(u8, key, "\x08")) { // backspace
             if (self.cursor > 0) {
@@ -197,17 +231,18 @@ pub const FlatText_Impl = struct {
         self.requestDraw() catch unreachable;
     }
 
-    pub fn draw(self: *FlatText_Impl, ctx: zgt.DrawContext) !void {
+    pub fn draw(self: *FlatText_Impl, ctx: *zgt.DrawContext) !void {
         const width = self.getWidth();
         const height = self.getHeight();
 
-        ctx.setColor(1, 1, 1);
+        ctx.setColor(0, 0, 0);
         ctx.rectangle(0, 0, width, height);
         ctx.fill();
+        //ctx.clear(0, 0, width, height);
 
         var layout = zgt.DrawContext.TextLayout.init();
         defer layout.deinit();
-        ctx.setColor(0, 0, 0);
+        ctx.setColor(1, 1, 1);
         layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
 
         const text = self.buffer.text.get();
@@ -228,18 +263,17 @@ pub const FlatText_Impl = struct {
 
             const lineHeight = 16;
             const lineStart = (lines.index orelse text.len) - line.len - 1;
-            ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{ lineNum }));
 
             var startIdx: usize = 0;
             var lineX: i32 = 0;
             while (compIndex < self.styling.components.len and self.styling.components[compIndex].start < lineStart + line.len) : (compIndex += 1) {
                 const comp = self.styling.components[compIndex];
                 const slice = text[comp.start..comp.end];
-                const colors = StyleComponent.extractColor(comp.color orelse 0x000000);
+                const colors = StyleComponent.extractColor(comp.color orelse 0xFFFFFF);
 
                 // if lineY < 0, we still need to update compIndex but not to draw text
                 if (lineY > -lineHeight) {
-                    ctx.setColor(0, 0, 0);
+                    ctx.setColor(1, 1, 1);
                     ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..(comp.start-lineStart)]);
                     lineX += @intCast(i32, layout.getTextSize(line[startIdx..(comp.start-lineStart)]).width);
 
@@ -249,13 +283,17 @@ pub const FlatText_Impl = struct {
                 }
                 startIdx = comp.end - lineStart;
             }
-            ctx.setColor(0, 0, 0);
+
+            ctx.setColor(0.5, 0.5, 0.5); // if not detected, it's a comment
             ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..]);
             if (self.cursor >= lineStart and self.cursor <= lineStart + line.len and lineY >= 0) {
                 const charPos = self.cursor - lineStart;
                 const x = layout.getTextSize(line[0..charPos]).width;
+                ctx.setColor(1, 1, 1);
                 ctx.line(@intCast(u32, lineBarWidth)+x, @intCast(u32, lineY), @intCast(u32, lineBarWidth)+x, @intCast(u32, lineY + 16));
             }
+
+            ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{ lineNum }));
 
             lineY += lineHeight;
             lineNum += 1;
@@ -270,7 +308,7 @@ pub const FlatText_Impl = struct {
         }
     }
 
-    pub fn deinit(self: *FlatText_Impl, widget: *zgt.Widget) void {
+    pub fn _deinit(self: *FlatText_Impl, widget: *zgt.Widget) void {
         _ = widget;
         self.buffer.allocator.free(self.styling.components);
     }
@@ -289,14 +327,35 @@ pub const FlatText_Impl = struct {
             const token = tokenizer.next();
             if (token.tag == .eof) break;
 
-            const keywordType = tagArray[@enumToInt(token.tag)];
-            if (keywordType.getColor()) |color| {
+            var keywordType = tagArray[@enumToInt(token.tag)];
+            if (keywordType == .Identifier and (textZ[token.loc.start] == 'u' or textZ[token.loc.start] == 'f')) {
+                const length = token.loc.end - token.loc.start;
+                var isNumeralType = true;
+                var i: usize = token.loc.start + 1;
+                while (i < token.loc.end) : (i += 1) {
+                    if (!std.ascii.isDigit(textZ[i])) {
+                        isNumeralType = false;
+                        break;
+                    }
+                }
+                if (length > 1 and isNumeralType) keywordType = .BuiltinType;
+            } else if (keywordType == .Identifier) {
+                const tokenText = textZ[token.loc.start..token.loc.end];
+                if (std.mem.eql(u8, tokenText, "true") or std.mem.eql(u8, tokenText, "false")) {
+                    keywordType = .Value;
+                } else if (std.mem.eql(u8, tokenText, "null")) {
+                    keywordType = .Value;
+                }
+            }
+            //if (keywordType.getColor()) |color| {
                 try components.append(.{
                     .start = token.loc.start,
                     .end = token.loc.end,
-                    .color = color
+                    .color = keywordType.getColor()
                 });
-            }
+            //} else {
+            //    std.log.warn("No style: {}", .{ token.tag });
+            //}
         }
         self.styling = Styling { .components = components.toOwnedSlice() };
     }

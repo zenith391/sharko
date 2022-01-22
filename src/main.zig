@@ -22,7 +22,7 @@ pub fn onSave(button: *zgt.Button_Impl) !void {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
     defer _ = gpa.deinit();
-    const allocator = &gpa.allocator;
+    const allocator = gpa.allocator();
 
     try zgt.backend.init();
     var window = try zgt.Window.init();
@@ -37,14 +37,17 @@ pub fn main() !void {
     try window.set(
         zgt.Column(.{}, .{
             (try zgt.Row(.{}, .{
-                zgt.Button(.{ .label = "Save", .onclick = onSave })
+                zgt.Button(.{ .label = "Save", .onclick = onSave }),
+                zgt.Button(.{ .label = "Run" }),
             })).setAlignX(0),
             zgt.Row(.{}, .{
                 zgt.Button(.{ .label = "Treee" }),
                 zgt.Expanded(
+                    // zgt.Tabs(&.{
+                    //     zgt.TabItem(.{ .label = filePath }, 
                     FlatText(.{ .buffer = &buffer })
+                    // )})
                 ),
-                zgt.Button(.{ .label = "Misc" })
             })
         })
     );
