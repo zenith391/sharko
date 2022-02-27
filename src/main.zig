@@ -1,3 +1,4 @@
+// 'Sharko' IDE
 const std = @import("std");
 const zgt = @import("zgt");
 
@@ -27,7 +28,7 @@ pub fn main() !void {
     try zgt.backend.init();
     var window = try zgt.Window.init();
 
-    const file = try std.fs.cwd().openFile(filePath, .{ .read = true });
+    const file = try std.fs.cwd().openFile(filePath, .{ .mode = .read_only });
     defer file.close();
 
     const text = try file.readToEndAlloc(allocator, std.math.maxInt(usize));

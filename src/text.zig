@@ -138,6 +138,8 @@ pub const FlatText_Impl = struct {
     /// Current scroll value (differs from target when animating)
     scrollY: u32 = 0,
 
+    isDragging: bool = false,
+
     /// Target scroll value
     targetScrollY: u32 = 0,
     fontFace: [:0]const u8 = "Fira Code",
@@ -150,7 +152,6 @@ pub const FlatText_Impl = struct {
     }
 
     fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
-        std.log.info("key: {s}", .{ key });
         var finalKey = key;
         if (std.mem.eql(u8, key, "\x08")) { // backspace
             if (self.cursor > 0) {
@@ -168,49 +169,71 @@ pub const FlatText_Impl = struct {
         self.cursor += finalKey.len;
     }
 
+    fn findCursorPositionAt(self: FlatText_Impl, x: u32, y: u32) !usize {
+        var cursor: usize = 0;
+
+        var layout = zgt.DrawContext.TextLayout.init();
+        defer layout.deinit();
+        layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
+
+        const text = self.buffer.text.get();
+
+        var buffer: [64]u8 = undefined;
+        const nlines = @intCast(u32, std.mem.count(u8, text, "\n"));
+        const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{ nlines });
+        const lineBarWidth = layout.getTextSize(maxLineText).width;
+
+        var sx = x;
+        if (sx >= lineBarWidth) {
+            sx -= lineBarWidth;
+        } else {
+            sx = 0;
+        }
+
+        // TODO: use array of line starts, and divide cursor Y by 16 to get index into it
+        // This would make this much faster but would only work if all lines are same size
+        var lines = std.mem.split(u8, text, "\n");
+        var lineY: u32 = 0;
+
+        cursor = text.len - 1; // By default cursor is at the end
+        while (lines.next()) |line| {
+            if (y + self.scrollY >= lineY and y + self.scrollY <= lineY + 16) {
+                const lineStart = (lines.index orelse text.len) - line.len - 1;
+                cursor = lineStart + line.len;
+
+                var size = layout.getTextSize(line);
+                while (size.width > sx and cursor > lineStart) {
+                    cursor -= 1;
+                    size = layout.getTextSize(line[0..cursor-lineStart]);
+                }
+                break;
+            }
+            lineY += 16;
+        }
+
+        return cursor;
+    }
+
     fn mouseButton(self: *FlatText_Impl, button: zgt.MouseButton, pressed: bool, x: u32, y: u32) !void {
+        if (button == .Left) {
+            self.isDragging = pressed;
+        }
+
         if (pressed) { // on press
             if (button == .Left) {
-                var layout = zgt.DrawContext.TextLayout.init();
-                defer layout.deinit();
-                layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
-
-                const text = self.buffer.text.get();
-
-                var buffer: [64]u8 = undefined;
-                const nlines = @intCast(u32, std.mem.count(u8, text, "\n"));
-                const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{ nlines });
-                const lineBarWidth = layout.getTextSize(maxLineText).width;
-
-                var sx = x;
-                if (sx >= lineBarWidth) {
-                    sx -= lineBarWidth;
-                } else {
-                    sx = 0;
-                }
-
-                // TODO: use array of line starts, and divide cursor Y by 16 to get index into it
-                // This would make this much faster but would only work if all lines are same size
-                var lines = std.mem.split(u8, text, "\n");
-                var lineY: u32 = 0;
-
-                self.cursor = text.len - 1; // By default cursor is at the end
-                while (lines.next()) |line| {
-                    if (y + self.scrollY >= lineY and y + self.scrollY <= lineY + 16) {
-                        const lineStart = (lines.index orelse text.len) - line.len - 1;
-                        self.cursor = lineStart + line.len;
-
-                        var size = layout.getTextSize(line);
-                        while (size.width > sx and self.cursor > lineStart) {
-                            self.cursor -= 1;
-                            size = layout.getTextSize(line[0..self.cursor-lineStart]);
-                        }
-                        break;
-                    }
-                    lineY += 16;
-                }
+                self.selection = null;
+                self.cursor = try self.findCursorPositionAt(x, y);
                 self.requestDraw() catch unreachable;
             }
+        }
+    }
+
+    fn mouseMoved(self: *FlatText_Impl, x: u32, y: u32) !void {
+        if (self.isDragging) {
+            self.selection = Selection {
+                .end = try self.findCursorPositionAt(x, y)
+            };
+            self.requestDraw() catch unreachable;
         }
     }
 
@@ -263,6 +286,10 @@ pub const FlatText_Impl = struct {
 
             const lineHeight = 16;
             const lineStart = (lines.index orelse text.len) - line.len - 1;
+            defer {
+                lineY += lineHeight;
+                lineNum += 1;
+            }
 
             var startIdx: usize = 0;
             var lineX: i32 = 0;
@@ -292,11 +319,16 @@ pub const FlatText_Impl = struct {
                 ctx.setColor(1, 1, 1);
                 ctx.line(@intCast(u32, lineBarWidth)+x, @intCast(u32, lineY), @intCast(u32, lineBarWidth)+x, @intCast(u32, lineY + 16));
             }
+            if (self.selection) |selection| {
+                if (self.cursor <= lineStart and selection.end >= lineStart + line.len and lineY >= 0) {
+                    const lineWidth = layout.getTextSize(line).width;
+                    ctx.setColorRGBA(0.5, 0.5, 1.0, 0.5);
+                    ctx.rectangle(@intCast(u32, lineBarWidth), @intCast(u32, lineY), lineWidth, 16);
+                    ctx.fill();
+                }
+            }
 
             ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{ lineNum }));
-
-            lineY += lineHeight;
-            lineNum += 1;
         }
 
         const t = 0.3;
@@ -396,6 +428,7 @@ pub fn FlatText(config: FlatTextConfig) !FlatText_Impl {
     var textEditor = FlatText_Impl.init(config.buffer);
     _ = try textEditor.addDrawHandler(FlatText_Impl.draw);
     _ = try textEditor.addMouseButtonHandler(FlatText_Impl.mouseButton);
+    _ = try textEditor.addMouseMotionHandler(FlatText_Impl.mouseMoved);
     _ = try textEditor.addScrollHandler(FlatText_Impl.mouseScroll);
     _ = try textEditor.addKeyTypeHandler(FlatText_Impl.keyTyped);
     return textEditor;
