@@ -10,9 +10,9 @@ const filePath: []const u8 = "src/text.zig";
 
 pub fn onSave(button: *zgt.Button_Impl) !void {
     _ = button;
-    std.log.info("Saving to {s}", .{ filePath });
+    std.log.info("Saving to {s}", .{filePath});
 
-    const file = try std.fs.cwd().createFile(filePath, .{ });
+    const file = try std.fs.cwd().createFile(filePath, .{});
     defer file.close();
 
     const writer = file.writer();
@@ -21,7 +21,7 @@ pub fn onSave(button: *zgt.Button_Impl) !void {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -35,23 +35,21 @@ pub fn main() !void {
     buffer = TextBuffer.from(allocator, text);
     defer buffer.deinit();
 
-    try window.set(
-        zgt.Column(.{}, .{
-            (try zgt.Row(.{}, .{
-                zgt.Button(.{ .label = "Save", .onclick = onSave }),
-                zgt.Button(.{ .label = "Run" }),
-            })).setAlignX(0),
-            zgt.Row(.{}, .{
-                zgt.Button(.{ .label = "Treee" }),
-                zgt.Expanded(
-                    // zgt.Tabs(&.{
-                    //     zgt.TabItem(.{ .label = filePath }, 
-                    FlatText(.{ .buffer = &buffer })
-                    // )})
-                ),
-            })
-        })
-    );
+    try window.set(zgt.Column(.{}, .{
+        (try zgt.Row(.{}, .{
+            zgt.Button(.{ .label = "Save", .onclick = onSave }),
+            zgt.Button(.{ .label = "Run" }),
+        })).setAlignX(0),
+        zgt.Row(.{}, .{
+            zgt.Button(.{ .label = "Treee" }),
+            zgt.Expanded(
+            // zgt.Tabs(&.{
+            //     zgt.TabItem(.{ .label = filePath },
+            FlatText(.{ .buffer = &buffer })
+            // )})
+            ),
+        }),
+    }));
 
     window.resize(1000, 600);
     window.show();

@@ -8,17 +8,12 @@ pub const TextBuffer = struct {
 
     /// Asserts 'text' is allocated with 'allocator'
     pub fn from(allocator: Allocator, text: []const u8) TextBuffer {
-        return TextBuffer {
-            .allocator = allocator,
-            .text = zgt.StringDataWrapper.of(text)
-        };
+        return TextBuffer{ .allocator = allocator, .text = zgt.StringDataWrapper.of(text) };
     }
 
     pub fn append(self: *TextBuffer, pos: usize, slice: []const u8) !void {
         const oldText = self.text.get();
-        const newText = try std.mem.concat(self.allocator, u8, &[_][]const u8 {
-            oldText[0..pos], slice, oldText[pos..]
-        });
+        const newText = try std.mem.concat(self.allocator, u8, &[_][]const u8{ oldText[0..pos], slice, oldText[pos..] });
         self.text.set(newText);
         self.allocator.free(oldText); // free the old text
     }
@@ -35,7 +30,7 @@ pub const TextBuffer = struct {
 
         // 4 is the maximum number of bytes an UTF-8 codepoint can take
         // we use saturating substraction to cap it to 0
-        var start: usize = pos -| len*4;
+        var start: usize = pos -| len * 4;
         var view = try std.unicode.Utf8View.init(oldText[start..]);
         var iterator = view.iterator();
 
@@ -72,9 +67,7 @@ pub const TextBuffer = struct {
             }
         }
 
-        const newText = try std.mem.concat(self.allocator, u8, &[_][]const u8 {
-            oldText[0..pos], oldText[pos+byteLength..]
-        }); // TODO: reuse the memory from oldText, thus making this operation non-faillible
+        const newText = try std.mem.concat(self.allocator, u8, &[_][]const u8{ oldText[0..pos], oldText[pos + byteLength ..] }); // TODO: reuse the memory from oldText, thus making this operation non-faillible
         self.text.set(newText);
         self.allocator.free(oldText); // free the old text
 
@@ -85,5 +78,4 @@ pub const TextBuffer = struct {
         self.allocator.free(self.text.get());
         self.* = undefined;
     }
-
 };

@@ -18,15 +18,15 @@ const KeywordType = enum {
 
     pub fn getColor(self: KeywordType) ?u24 {
         return switch (self) {
-            .Type        => 0x0099CC,
+            .Type => 0x0099CC,
             .BuiltinType => 0x6699FF,
             .ControlFlow => 0xFF0000,
-            .Identifier  => null, // default color
-            .String      => 0xF0B800,
-            .Comment     => 0x888888,
-            .Operator    => 0xFF0000,
-            .Value       => 0xCC33FF,
-            else         => null
+            .Identifier => null, // default color
+            .String => 0xF0B800,
+            .Comment => 0x888888,
+            .Operator => 0xFF0000,
+            .Value => 0xCC33FF,
+            else => null,
         };
     }
 };
@@ -91,7 +91,7 @@ const tagArray = std.enums.directEnumArrayDefault(std.zig.Token.Tag, KeywordType
     .keyword_or = .Operator,
 
     .equal = .Operator,
-    .question_mark = .Operator
+    .question_mark = .Operator,
 });
 
 const StyleComponent = struct {
@@ -100,10 +100,10 @@ const StyleComponent = struct {
     color: ?u24 = null,
 
     pub fn extractColor(rgb: u24) [3]f32 {
-        return [3]f32 {
+        return [3]f32{
             @intToFloat(f32, (rgb >> 16) & 0xFF) / 255,
-            @intToFloat(f32, (rgb >>  8) & 0xFF) / 255,
-            @intToFloat(f32, (rgb      ) & 0xFF) / 255,
+            @intToFloat(f32, (rgb >> 8) & 0xFF) / 255,
+            @intToFloat(f32, (rgb) & 0xFF) / 255,
         };
     }
 };
@@ -114,13 +114,13 @@ const Styling = struct {
         /// Tabs width is declared directly in pixels (not recommended as it breaks font sizes)
         Pixels: u32,
         /// Tabs width is declared in number of spaces (recommended)
-        Spaces: u32
-    } = .{ .Spaces = 4 }
+        Spaces: u32,
+    } = .{ .Spaces = 4 },
 };
 
 const Selection = struct {
-    /// The start of the selection is the current cursor position
-    end: usize
+    /// The end of the selection is the current cursor position
+    start: usize,
 };
 
 pub const FlatText_Impl = struct {
@@ -145,10 +145,7 @@ pub const FlatText_Impl = struct {
     fontFace: [:0]const u8 = "Fira Code",
 
     pub fn init(buffer: *TextBuffer) FlatText_Impl {
-        return FlatText_Impl.init_events(FlatText_Impl {
-            .buffer = buffer,
-            .styling = Styling { .components = &[0]StyleComponent {} }
-        });
+        return FlatText_Impl.init_events(FlatText_Impl{ .buffer = buffer, .styling = Styling{ .components = &[0]StyleComponent{} } });
     }
 
     fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
@@ -178,9 +175,11 @@ pub const FlatText_Impl = struct {
 
         const text = self.buffer.text.get();
 
+        // Get the maximum width of all line numbers, by using the largest line number.
         var buffer: [64]u8 = undefined;
         const nlines = @intCast(u32, std.mem.count(u8, text, "\n"));
-        const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{ nlines });
+        // 'catch unreachable' because nlines, being a 32-bit int, won't ever be able to have 60 digits
+        const maxLineText = std.fmt.bufPrint(&buffer, "{d}    ", .{nlines}) catch unreachable;
         const lineBarWidth = layout.getTextSize(maxLineText).width;
 
         var sx = x;
@@ -204,7 +203,7 @@ pub const FlatText_Impl = struct {
                 var size = layout.getTextSize(line);
                 while (size.width > sx and cursor > lineStart) {
                     cursor -= 1;
-                    size = layout.getTextSize(line[0..cursor-lineStart]);
+                    size = layout.getTextSize(line[0 .. cursor - lineStart]);
                 }
                 break;
             }
@@ -230,9 +229,10 @@ pub const FlatText_Impl = struct {
 
     fn mouseMoved(self: *FlatText_Impl, x: u32, y: u32) !void {
         if (self.isDragging) {
-            self.selection = Selection {
-                .end = try self.findCursorPositionAt(x, y)
-            };
+            if (self.selection == null) {
+                self.selection = Selection{ .start = self.cursor };
+            }
+            self.cursor = try self.findCursorPositionAt(x, y);
             self.requestDraw() catch unreachable;
         }
     }
@@ -272,14 +272,17 @@ pub const FlatText_Impl = struct {
 
         var buffer: [64]u8 = undefined;
         const nlines = @intCast(u32, std.mem.count(u8, text, "\n"));
-        const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{ nlines });
+        const maxLineText = try std.fmt.bufPrint(&buffer, "{d}    ", .{nlines});
         const lineBarWidth = @intCast(i32, layout.getTextSize(maxLineText).width);
         var lineNum: u32 = 1;
         var lines = std.mem.split(u8, text, "\n");
 
         var lineY: i32 = -@intCast(i32, self.scrollY);
         var compIndex: usize = 0;
+        // Iterate through every line
         while (lines.next()) |line| {
+            // If we're below the component's height (that is, not visible) just
+            // break out of the loop
             if (lineY > height) {
                 break;
             }
@@ -301,8 +304,8 @@ pub const FlatText_Impl = struct {
                 // if lineY < 0, we still need to update compIndex but not to draw text
                 if (lineY > -lineHeight) {
                     ctx.setColor(1, 1, 1);
-                    ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..(comp.start-lineStart)]);
-                    lineX += @intCast(i32, layout.getTextSize(line[startIdx..(comp.start-lineStart)]).width);
+                    ctx.text(lineBarWidth + lineX, lineY, layout, line[startIdx..(comp.start - lineStart)]);
+                    lineX += @intCast(i32, layout.getTextSize(line[startIdx..(comp.start - lineStart)]).width);
 
                     ctx.setColor(colors[0], colors[1], colors[2]);
                     ctx.text(lineBarWidth + lineX, lineY, layout, slice);
@@ -317,24 +320,29 @@ pub const FlatText_Impl = struct {
                 const charPos = self.cursor - lineStart;
                 const x = layout.getTextSize(line[0..charPos]).width;
                 ctx.setColor(1, 1, 1);
-                ctx.line(@intCast(u32, lineBarWidth)+x, @intCast(u32, lineY), @intCast(u32, lineBarWidth)+x, @intCast(u32, lineY + 16));
+                ctx.line(@intCast(u32, lineBarWidth) + x, @intCast(u32, lineY), @intCast(u32, lineBarWidth) + x, @intCast(u32, lineY + 16));
             }
+            ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{lineNum}));
+            
             if (self.selection) |selection| {
-                if (self.cursor <= lineStart and selection.end >= lineStart + line.len and lineY >= 0) {
-                    const lineWidth = layout.getTextSize(line).width;
+                if (selection.start <= lineStart + line.len and self.cursor >= lineStart and lineY >= 0) {
+                    // The position in the current line where the cursor is at
+                    const lineCursorEnd = if (self.cursor >= lineStart + line.len)
+                        line.len
+                    else
+                        self.cursor - lineStart;
+                    const lineWidth = layout.getTextSize(line[0..lineCursorEnd]).width;
+
                     ctx.setColorRGBA(0.5, 0.5, 1.0, 0.5);
                     ctx.rectangle(@intCast(u32, lineBarWidth), @intCast(u32, lineY), lineWidth, 16);
                     ctx.fill();
                 }
             }
-
-            ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{ lineNum }));
         }
 
         const t = 0.3;
         const oldY = self.scrollY;
-        self.scrollY = @floatToInt(u32,
-            @intToFloat(f32, self.scrollY) * (1 - t) + @intToFloat(f32, self.targetScrollY) * t);
+        self.scrollY = @floatToInt(u32, @intToFloat(f32, self.scrollY) * (1 - t) + @intToFloat(f32, self.targetScrollY) * t);
         if (self.scrollY != oldY) {
             self.requestDraw() catch unreachable;
         }
@@ -380,16 +388,12 @@ pub const FlatText_Impl = struct {
                 }
             }
             //if (keywordType.getColor()) |color| {
-                try components.append(.{
-                    .start = token.loc.start,
-                    .end = token.loc.end,
-                    .color = keywordType.getColor()
-                });
+            try components.append(.{ .start = token.loc.start, .end = token.loc.end, .color = keywordType.getColor() });
             //} else {
             //    std.log.warn("No style: {}", .{ token.tag });
             //}
         }
-        self.styling = Styling { .components = components.toOwnedSlice() };
+        self.styling = Styling{ .components = components.toOwnedSlice() };
     }
 
     /// When the text is changed in the StringDataWrapper
@@ -404,11 +408,8 @@ pub const FlatText_Impl = struct {
         if (self.peer == null) {
             self.peer = try zgt.backend.Canvas.create();
             try self.show_events();
-            
-            _ = try self.buffer.text.addChangeListener(.{
-                .function = wrapperTextChanged,
-                .userdata = @ptrToInt(&self.peer)
-            });
+
+            _ = try self.buffer.text.addChangeListener(.{ .function = wrapperTextChanged, .userdata = @ptrToInt(&self.peer) });
             self.buffer.text.set(self.buffer.text.get());
         }
     }
@@ -416,13 +417,11 @@ pub const FlatText_Impl = struct {
     pub fn getPreferredSize(self: *FlatText_Impl, available: zgt.Size) zgt.Size {
         _ = self;
         _ = available;
-        return zgt.Size { .width = 100.0, .height = 100.0 };
+        return zgt.Size{ .width = 100.0, .height = 100.0 };
     }
 };
 
-pub const FlatTextConfig = struct {
-    buffer: *TextBuffer
-};
+pub const FlatTextConfig = struct { buffer: *TextBuffer };
 
 pub fn FlatText(config: FlatTextConfig) !FlatText_Impl {
     var textEditor = FlatText_Impl.init(config.buffer);
