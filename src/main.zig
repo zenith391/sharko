@@ -6,7 +6,7 @@ const FlatText = @import("text.zig").FlatText;
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
 var buffer: TextBuffer = undefined;
-const filePath: []const u8 = "src/text.zig";
+const filePath: [:0]const u8 = "src/text.zig";
 
 pub fn onSave(button: *zgt.Button_Impl) !void {
     _ = button;
@@ -35,6 +35,9 @@ pub fn main() !void {
     buffer = TextBuffer.from(allocator, text);
     defer buffer.deinit();
 
+    const tabLabel = try allocator.dupeZ(u8, std.fs.path.basename(filePath));
+    defer allocator.free(tabLabel);
+
     try window.set(zgt.Column(.{}, .{
         (try zgt.Row(.{}, .{
             zgt.Button(.{ .label = "Save", .onclick = onSave }),
@@ -43,12 +46,13 @@ pub fn main() !void {
         zgt.Row(.{}, .{
             zgt.Button(.{ .label = "Treee" }),
             zgt.Expanded(
-            // zgt.Tabs(&.{
-            //     zgt.TabItem(.{ .label = filePath },
-            FlatText(.{ .buffer = &buffer })
-            // )})
+                zgt.Tabs(.{
+                    zgt.Tab(.{ .label = tabLabel},
+                        FlatText(.{ .buffer = &buffer })
+                    )
+                }),
             ),
-        }),
+        })
     }));
 
     window.resize(1000, 600);
