@@ -323,7 +323,7 @@ pub const FlatText_Impl = struct {
                 ctx.line(@intCast(u32, lineBarWidth) + x, @intCast(u32, lineY), @intCast(u32, lineBarWidth) + x, @intCast(u32, lineY + 16));
             }
             ctx.text(0, lineY, layout, try std.fmt.bufPrint(&buffer, "{d: >4}", .{lineNum}));
-            
+
             if (self.selection) |selection| {
                 if (selection.start <= lineStart + line.len and self.cursor >= lineStart and lineY >= 0) {
                     // The position in the current line where the cursor is at

@@ -5,6 +5,9 @@ const zgt = @import("zgt");
 const FlatText = @import("text.zig").FlatText;
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const zgtAllocator = gpa.allocator();
+
 var buffer: TextBuffer = undefined;
 const filePath: [:0]const u8 = "src/text.zig";
 
@@ -20,8 +23,19 @@ pub fn onSave(button: *zgt.Button_Impl) !void {
     std.log.info("Saved.", .{});
 }
 
+pub fn onRun(_: *zgt.Button_Impl) !void {
+    const allocator = zgt.internal.scratch_allocator;
+    const childProcess = try std.ChildProcess.init(&.{ "zig", "build", "run" }, allocator);
+    defer childProcess.deinit();
+    // TODO: set CWD to project directory
+    // childProcess.cwd = "";
+    const termination = try childProcess.spawnAndWait();
+    if (termination.Exited != 0) {
+        std.log.info("Build failure", .{});
+    }
+}
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -41,18 +55,18 @@ pub fn main() !void {
     try window.set(zgt.Column(.{}, .{
         (try zgt.Row(.{}, .{
             zgt.Button(.{ .label = "Save", .onclick = onSave }),
-            zgt.Button(.{ .label = "Run" }),
+            zgt.Button(.{ .label = "Run", .onclick = onRun }),
+            // TODO: do profiling using valgrind and show with kcachegrind
+            zgt.Button(.{ .label = "Profile" }),
         })).setAlignX(0),
         zgt.Row(.{}, .{
-            zgt.Button(.{ .label = "Treee" }),
+            zgt.Button(.{ .label = "Tree" }),
             zgt.Expanded(
                 zgt.Tabs(.{
-                    zgt.Tab(.{ .label = tabLabel},
-                        FlatText(.{ .buffer = &buffer })
-                    )
+                    zgt.Tab(.{ .label = tabLabel }, FlatText(.{ .buffer = &buffer })),
                 }),
             ),
-        })
+        }),
     }));
 
     window.resize(1000, 600);
