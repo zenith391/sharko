@@ -145,7 +145,9 @@ pub const FlatText_Impl = struct {
     fontFace: [:0]const u8 = "Fira Code",
 
     pub fn init(buffer: *TextBuffer) FlatText_Impl {
-        return FlatText_Impl.init_events(FlatText_Impl{ .buffer = buffer, .styling = Styling{ .components = &[0]StyleComponent{} } });
+        return FlatText_Impl.init_events(FlatText_Impl{ .buffer = buffer, .styling = Styling{
+            .components = &[0]StyleComponent{},
+        } });
     }
 
     fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
@@ -164,6 +166,83 @@ pub const FlatText_Impl = struct {
 
         try self.buffer.append(self.cursor, finalKey);
         self.cursor += finalKey.len;
+    }
+
+    fn getLineStart(text: []const u8, cursor: usize) usize {
+        var pos: usize = cursor;
+        while (pos > 0) : (pos -|= 1) {
+            if (text[pos] == '\n') {
+                return pos+1;
+            }
+        }
+        return pos;
+    }
+
+    fn getLineEnd(text: []const u8, cursor: usize) usize {
+        var pos: usize = cursor;
+        while (pos < text.len) : (pos += 1) {
+            if (text[pos] == '\n') {
+                return pos;
+            }
+        }
+        return pos;
+    }
+
+    fn keyPressed(self: *FlatText_Impl, keycode: u16) !void {
+        switch (keycode) {
+            // Up cursor
+            111 => {
+                if (self.cursor > 0) {
+                    const lineStart = getLineStart(self.buffer.text.get(), self.cursor - 1);
+                    const previousLineStart = getLineStart(self.buffer.text.get(),
+                        lineStart - 2); // skip first letter and \n
+                    const previousLineLength = getLineEnd(self.buffer.text.get(), previousLineStart) - previousLineStart;
+
+                    // The position of the cursor relative to the line
+                    var relCursor = self.cursor - lineStart;
+                    if (relCursor > previousLineLength) {
+                        relCursor = previousLineLength;
+                    }
+                    self.cursor = previousLineStart + relCursor;
+                    self.selection = null;
+                    self.requestDraw() catch unreachable;
+                }
+            },
+            // Left cursor
+            113 => {
+                if (self.cursor > 0) {
+                    self.cursor -= 1;
+                    self.selection = null;
+                    self.requestDraw() catch unreachable;
+                }
+            },
+            // Right cursor
+            114 => {
+                if (self.cursor < self.buffer.length()) {
+                    self.cursor += 1;
+                    self.selection = null;
+                    self.requestDraw() catch unreachable;
+                }
+            },
+            // Down cursor
+            116 => {
+                if (self.cursor < self.buffer.length()) {
+                    const lineStart = getLineStart(self.buffer.text.get(), self.cursor - 1);
+                    const nextLineStart = getLineEnd(self.buffer.text.get(), self.cursor) + 1;
+                    const nextLineLength = getLineEnd(self.buffer.text.get(), nextLineStart) - nextLineStart;
+                    
+                    // The position of the cursor relative to the line
+                    var relCursor = self.cursor - lineStart;
+                    if (relCursor > nextLineLength) {
+                        relCursor = nextLineLength;
+                    }
+                    self.cursor = nextLineStart + relCursor;
+                    self.selection = null;
+                    self.requestDraw() catch unreachable;
+                }
+            },
+            else => {},
+        }
     }
 
     fn findCursorPositionAt(self: FlatText_Impl, x: u32, y: u32) !usize {
@@ -430,5 +509,6 @@ pub fn FlatText(config: FlatTextConfig) !FlatText_Impl {
     _ = try textEditor.addMouseMotionHandler(FlatText_Impl.mouseMoved);
     _ = try textEditor.addScrollHandler(FlatText_Impl.mouseScroll);
     _ = try textEditor.addKeyTypeHandler(FlatText_Impl.keyTyped);
+    _ = try textEditor.addKeyPressHandler(FlatText_Impl.keyPressed);
     return textEditor;
 }

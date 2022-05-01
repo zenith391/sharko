@@ -29,10 +29,7 @@ pub fn onRun(_: *zgt.Button_Impl) !void {
     defer childProcess.deinit();
     // TODO: set CWD to project directory
     // childProcess.cwd = "";
-    const termination = try childProcess.spawnAndWait();
-    if (termination.Exited != 0) {
-        std.log.info("Build failure", .{});
-    }
+    try childProcess.spawn();
 }
 
 pub fn main() !void {
@@ -63,7 +60,7 @@ pub fn main() !void {
             zgt.Button(.{ .label = "Tree" }),
             zgt.Expanded(
                 zgt.Tabs(.{
-                    zgt.Tab(.{ .label = tabLabel }, FlatText(.{ .buffer = &buffer })),
+                    zgt.Tab(.{ .label = tabLabel }, zgt.Expanded(FlatText(.{ .buffer = &buffer }))),
                 }),
             ),
         }),

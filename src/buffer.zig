@@ -11,6 +11,11 @@ pub const TextBuffer = struct {
         return TextBuffer{ .allocator = allocator, .text = zgt.StringDataWrapper.of(text) };
     }
 
+    pub fn length(self: *TextBuffer) usize {
+        const text = self.text.get();
+        return text.len;
+    }
+
     pub fn append(self: *TextBuffer, pos: usize, slice: []const u8) !void {
         const oldText = self.text.get();
         const newText = try std.mem.concat(self.allocator, u8, &[_][]const u8{ oldText[0..pos], slice, oldText[pos..] });
