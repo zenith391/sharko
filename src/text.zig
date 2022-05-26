@@ -172,7 +172,7 @@ pub const FlatText_Impl = struct {
         var pos: usize = cursor;
         while (pos > 0) : (pos -|= 1) {
             if (text[pos] == '\n') {
-                return pos+1;
+                return pos + 1;
             }
         }
         return pos;
@@ -194,8 +194,7 @@ pub const FlatText_Impl = struct {
             111 => {
                 if (self.cursor > 0) {
                     const lineStart = getLineStart(self.buffer.text.get(), self.cursor - 1);
-                    const previousLineStart = getLineStart(self.buffer.text.get(),
-                        lineStart - 2); // skip first letter and \n
+                    const previousLineStart = getLineStart(self.buffer.text.get(), lineStart - 2); // skip first letter and \n
                     const previousLineLength = getLineEnd(self.buffer.text.get(), previousLineStart) - previousLineStart;
 
                     // The position of the cursor relative to the line
@@ -230,7 +229,7 @@ pub const FlatText_Impl = struct {
                     const lineStart = getLineStart(self.buffer.text.get(), self.cursor - 1);
                     const nextLineStart = getLineEnd(self.buffer.text.get(), self.cursor) + 1;
                     const nextLineLength = getLineEnd(self.buffer.text.get(), nextLineStart) - nextLineStart;
-                    
+
                     // The position of the cursor relative to the line
                     var relCursor = self.cursor - lineStart;
                     if (relCursor > nextLineLength) {
