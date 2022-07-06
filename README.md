@@ -1,3 +1,3 @@
-# zide2
+# Sharko
 
-The unofficial Zig editor made in Zig, except it's 2.0.
+A Zig editor made in Zig.
