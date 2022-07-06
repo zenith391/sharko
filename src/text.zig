@@ -144,10 +144,14 @@ pub const FlatText_Impl = struct {
     targetScrollY: u32 = 0,
     fontFace: [:0]const u8 = "Fira Code",
 
+    /// The draw timer is used to count the time between draw calls
+    /// This allows for constant speed regardless of any potential lag
+    drawTimer: std.time.Timer = undefined,
+
     pub fn init(buffer: *TextBuffer) FlatText_Impl {
         return FlatText_Impl.init_events(FlatText_Impl{ .buffer = buffer, .styling = Styling{
             .components = &[0]StyleComponent{},
-        } });
+        }, .drawTimer = std.time.Timer.start() catch unreachable, });
     }
 
     fn keyTyped(self: *FlatText_Impl, key: []const u8) !void {
@@ -329,6 +333,9 @@ pub const FlatText_Impl = struct {
                 self.targetScrollY = 0;
             }
         }
+        if (self.scrollY == self.targetScrollY) {
+            self.drawTimer.reset();
+        }
         self.requestDraw() catch unreachable;
     }
 
@@ -418,7 +425,8 @@ pub const FlatText_Impl = struct {
             }
         }
 
-        const t = 0.3;
+        const timeSinceLastCall = @intToFloat(f32, self.drawTimer.lap()) / @intToFloat(f32, std.time.ns_per_ms);
+        const t = std.math.min(1, 0.012 * timeSinceLastCall); // clamp to 1 maximum
         const oldY = self.scrollY;
         self.scrollY = @floatToInt(u32, @intToFloat(f32, self.scrollY) * (1 - t) + @intToFloat(f32, self.targetScrollY) * t);
         if (self.scrollY != oldY) {
