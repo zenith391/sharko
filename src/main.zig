@@ -1,18 +1,18 @@
 const std = @import("std");
-const zgt = @import("zgt");
+const capy = @import("capy");
 
 const FlatText = @import("text.zig").FlatText;
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const zgtAllocator = gpa.allocator();
+const capyAllocator = gpa.allocator();
 
 var buffer: TextBuffer = undefined;
 const filePath: [:0]const u8 = "src/text.zig";
 
-var window: zgt.Window = undefined;
+var window: capy.Window = undefined;
 
-pub fn onSave(button: *zgt.Button_Impl) !void {
+pub fn onSave(button: *capy.Button_Impl) !void {
     _ = button;
     std.log.info("Saving to {s}", .{filePath});
 
@@ -24,8 +24,8 @@ pub fn onSave(button: *zgt.Button_Impl) !void {
     std.log.info("Saved.", .{});
 }
 
-pub fn onRun(_: *zgt.Button_Impl) !void {
-    const allocator = zgt.internal.scratch_allocator;
+pub fn onRun(_: *capy.Button_Impl) !void {
+    const allocator = capy.internal.scratch_allocator;
     var childProcess = std.ChildProcess.init(&.{ "zig", "build", "run" }, allocator);
     // TODO: set CWD to project directory
     // childProcess.cwd = "";
@@ -33,8 +33,8 @@ pub fn onRun(_: *zgt.Button_Impl) !void {
     // TODO: clean using wait()
 }
 
-pub fn onProfile(_: *zgt.Button_Impl) !void {
-    const allocator = zgt.internal.scratch_allocator;
+pub fn onProfile(_: *capy.Button_Impl) !void {
+    const allocator = capy.internal.scratch_allocator;
     std.log.debug("Build project", .{});
     var buildProcess = std.ChildProcess.init(&.{ "zig", "build" }, allocator);
     _ = try buildProcess.spawnAndWait();
@@ -54,8 +54,8 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try zgt.backend.init();
-    window = try zgt.Window.init();
+    try capy.backend.init();
+    window = try capy.Window.init();
 
     const file = try std.fs.cwd().openFile(filePath, .{ .mode = .read_only });
     defer file.close();
@@ -67,52 +67,52 @@ pub fn main() !void {
     const tabLabel = try allocator.dupeZ(u8, std.fs.path.basename(filePath));
     defer allocator.free(tabLabel);
 
-    try window.set(zgt.Column(.{}, .{
-        zgt.Row(.{ .spacing = 0 }, .{
-            zgt.Button(.{ .label = "Tree" }),
-            zgt.Column(.{}, .{
-                (try zgt.Row(.{ .spacing = 10 }, .{
-                    zgt.Button(.{ .label = "▶", .onclick = onRun }),
-                    zgt.Button(.{ .label = "💾", .onclick = onSave }),
+    try window.set(capy.Column(.{}, .{
+        capy.Row(.{ .spacing = 0 }, .{
+            capy.Button(.{ .label = "Tree" }),
+            capy.Column(.{}, .{
+                (try capy.Row(.{ .spacing = 10 }, .{
+                    capy.Button(.{ .label = "▶", .onclick = onRun }),
+                    capy.Button(.{ .label = "💾", .onclick = onSave }),
                     // TODO: do profiling using valgrind and show with kcachegrind
-                    zgt.Button(.{ .label = "▶ (Profiling)", .onclick = onProfile }),
-                })).setAlignX(0),
-                zgt.Expanded(
-                    zgt.Tabs(.{
-                        zgt.Tab(.{ .label = tabLabel }, zgt.Expanded(FlatText(.{ .buffer = &buffer }))),
+                    capy.Button(.{ .label = "▶ (Profiling)", .onclick = onProfile }),
+                })).set("alignX", 0),
+                capy.Expanded(
+                    capy.Tabs(.{
+                        capy.Tab(.{ .label = tabLabel }, capy.Expanded(FlatText(.{ .buffer = &buffer }))),
                     }),
                 ),
             }),
         }),
     }));
-    window.setMenuBar(zgt.MenuBar(.{
-        zgt.Menu(.{ .label = "File" }, .{
-            zgt.Menu(.{ .label = "New" }, .{
-                zgt.MenuItem(.{ .label = "Project" }),
-                zgt.MenuItem(.{ .label = "Zig File" }),
+    window.setMenuBar(capy.MenuBar(.{
+        capy.Menu(.{ .label = "File" }, .{
+            capy.Menu(.{ .label = "New" }, .{
+                capy.MenuItem(.{ .label = "Project" }),
+                capy.MenuItem(.{ .label = "Zig File" }),
             }),
-            zgt.MenuItem(.{ .label = "Open Project.." }),
-            zgt.MenuItem(.{ .label = "Save" }),
-            zgt.MenuItem(.{ .label = "Exit", .onClick = exitCallback }),
+            capy.MenuItem(.{ .label = "Open Project.." }),
+            capy.MenuItem(.{ .label = "Save" }),
+            capy.MenuItem(.{ .label = "Exit", .onClick = exitCallback }),
         }),
-        zgt.Menu(.{ .label = "Edit" }, .{
-            zgt.MenuItem(.{ .label = "Find" }),
-            zgt.MenuItem(.{ .label = "Replace" }),
+        capy.Menu(.{ .label = "Edit" }, .{
+            capy.MenuItem(.{ .label = "Find" }),
+            capy.MenuItem(.{ .label = "Replace" }),
         }),
-        zgt.Menu(.{ .label = "Run" }, .{
+        capy.Menu(.{ .label = "Run" }, .{
             // TODO: the name of the default step in tooltip
-            zgt.MenuItem(.{ .label = "Run" }),
-            zgt.MenuItem(.{ .label = "Debug" }),
-            zgt.Menu(.{ .label = "Run As" }, .{
+            capy.MenuItem(.{ .label = "Run" }),
+            capy.MenuItem(.{ .label = "Debug" }),
+            capy.Menu(.{ .label = "Run As" }, .{
                 // filled per project
             }),
-            zgt.Menu(.{ .label = "Debug As" }, .{
+            capy.Menu(.{ .label = "Debug As" }, .{
                 // filled per project
             }),
-            zgt.Menu(.{ .label = "Profile As" }, .{
+            capy.Menu(.{ .label = "Profile As" }, .{
                 // filled per project
             }),
-            zgt.Menu(.{ .label = "Coverage As" }, .{
+            capy.Menu(.{ .label = "Coverage As" }, .{
                 // filled per project
             }),
         }),
@@ -122,7 +122,7 @@ pub fn main() !void {
     window.setTitle("Sharko");
     window.show();
 
-    zgt.runEventLoop();
+    capy.runEventLoop();
 }
 
 fn exitCallback() void {

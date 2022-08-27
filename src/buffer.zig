@@ -1,14 +1,14 @@
-const zgt = @import("zgt");
+const capy = @import("capy");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const TextBuffer = struct {
-    text: zgt.StringDataWrapper,
+    text: capy.StringDataWrapper,
     allocator: Allocator,
 
     /// Asserts 'text' is allocated with 'allocator'
     pub fn from(allocator: Allocator, text: []const u8) TextBuffer {
-        return TextBuffer{ .allocator = allocator, .text = zgt.StringDataWrapper.of(text) };
+        return TextBuffer{ .allocator = allocator, .text = capy.StringDataWrapper.of(text) };
     }
 
     pub fn length(self: *TextBuffer) usize {

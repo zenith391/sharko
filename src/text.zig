@@ -1,5 +1,5 @@
 const std = @import("std");
-const zgt = @import("zgt");
+const capy = @import("capy");
 const TextBuffer = @import("buffer.zig").TextBuffer;
 
 const KeywordType = enum {
@@ -124,9 +124,9 @@ const Selection = struct {
 };
 
 pub const FlatText_Impl = struct {
-    pub usingnamespace zgt.internal.All(FlatText_Impl);
+    pub usingnamespace capy.internal.All(FlatText_Impl);
 
-    peer: ?zgt.backend.Canvas = null,
+    peer: ?capy.backend.Canvas = null,
     handlers: FlatText_Impl.Handlers = undefined,
     dataWrappers: FlatText_Impl.DataWrappers = .{},
 
@@ -248,10 +248,10 @@ pub const FlatText_Impl = struct {
         }
     }
 
-    fn findCursorPositionAt(self: FlatText_Impl, x: u32, y: u32) !usize {
+    fn findCursorPositionAt(self: FlatText_Impl, x: i32, y: i32) !usize {
         var cursor: usize = 0;
 
-        var layout = zgt.DrawContext.TextLayout.init();
+        var layout = capy.DrawContext.TextLayout.init();
         defer layout.deinit();
         layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
 
@@ -266,7 +266,7 @@ pub const FlatText_Impl = struct {
 
         var sx = x;
         if (sx >= lineBarWidth) {
-            sx -= lineBarWidth;
+            sx -= @intCast(i32, lineBarWidth);
         } else {
             sx = 0;
         }
@@ -278,7 +278,7 @@ pub const FlatText_Impl = struct {
 
         cursor = text.len - 1; // By default cursor is at the end
         while (lines.next()) |line| {
-            if (y + self.scrollY >= lineY and y + self.scrollY <= lineY + 16) {
+            if (y + @intCast(i32, self.scrollY) >= lineY and y + @intCast(i32, self.scrollY) <= lineY + 16) {
                 const lineStart = (lines.index orelse text.len) - line.len - 1;
                 cursor = lineStart + line.len;
 
@@ -295,7 +295,7 @@ pub const FlatText_Impl = struct {
         return cursor;
     }
 
-    fn mouseButton(self: *FlatText_Impl, button: zgt.MouseButton, pressed: bool, x: u32, y: u32) !void {
+    fn mouseButton(self: *FlatText_Impl, button: capy.MouseButton, pressed: bool, x: i32, y: i32) !void {
         if (button == .Left) {
             self.isDragging = pressed;
         }
@@ -309,7 +309,7 @@ pub const FlatText_Impl = struct {
         }
     }
 
-    fn mouseMoved(self: *FlatText_Impl, x: u32, y: u32) !void {
+    fn mouseMoved(self: *FlatText_Impl, x: i32, y: i32) !void {
         if (self.isDragging) {
             if (self.selection == null) {
                 self.selection = Selection{ .start = self.cursor };
@@ -339,7 +339,7 @@ pub const FlatText_Impl = struct {
         self.requestDraw() catch unreachable;
     }
 
-    pub fn draw(self: *FlatText_Impl, ctx: *zgt.DrawContext) !void {
+    pub fn draw(self: *FlatText_Impl, ctx: *capy.DrawContext) !void {
         const width = self.getWidth();
         const height = self.getHeight();
 
@@ -348,7 +348,7 @@ pub const FlatText_Impl = struct {
         ctx.fill();
         //ctx.clear(0, 0, width, height);
 
-        var layout = zgt.DrawContext.TextLayout.init();
+        var layout = capy.DrawContext.TextLayout.init();
         defer layout.deinit();
         ctx.setColor(1, 1, 1);
         layout.setFont(.{ .face = self.fontFace, .size = 10.0 });
@@ -434,7 +434,7 @@ pub const FlatText_Impl = struct {
         }
     }
 
-    pub fn _deinit(self: *FlatText_Impl, widget: *zgt.Widget) void {
+    pub fn _deinit(self: *FlatText_Impl, widget: *capy.Widget) void {
         _ = widget;
         self.buffer.allocator.free(self.styling.components);
     }
@@ -492,7 +492,7 @@ pub const FlatText_Impl = struct {
 
     pub fn show(self: *FlatText_Impl) !void {
         if (self.peer == null) {
-            self.peer = try zgt.backend.Canvas.create();
+            self.peer = try capy.backend.Canvas.create();
             try self.show_events();
 
             _ = try self.buffer.text.addChangeListener(.{ .function = wrapperTextChanged, .userdata = @ptrToInt(&self.peer) });
@@ -500,10 +500,10 @@ pub const FlatText_Impl = struct {
         }
     }
 
-    pub fn getPreferredSize(self: *FlatText_Impl, available: zgt.Size) zgt.Size {
+    pub fn getPreferredSize(self: *FlatText_Impl, available: capy.Size) capy.Size {
         _ = self;
         _ = available;
-        return zgt.Size{ .width = 100.0, .height = 100.0 };
+        return capy.Size{ .width = 100.0, .height = 100.0 };
     }
 };
 
